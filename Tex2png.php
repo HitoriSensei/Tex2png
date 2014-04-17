@@ -18,12 +18,12 @@ class Tex2png
     /**
     * Where is the LaTex ?
     */
-    const LATEX = "latex";
+    const LATEX = "$(which latex)";
     
     /**
     * Where is the DVIPNG ?
     */
-    const DVIPNG = "dvipng";
+    const DVIPNG = "$(which dvipng)";
 
     /**
      * LaTeX packges
