@@ -157,12 +157,14 @@ class Tex2png
     {
         // XXX background: -bg 'rgb 0.5 0.5 0.5'
         $filename = $this->tmpDir . '/' . $this->hash . '.png';
-        $command = self::DVIPNG . ' -q* -T tight -D ' . $this->density . ' -o ' . $filename . ' ' . $this->tmpDir . '/' . $this->hash . '.dvi 2>&1';
-        shell_exec($command);
-        if (!file_exists($this->tmpDir . '/' . $this->hash . '.png')) {
+        $command = self::DVIPNG . ' -q* -T tight -bg Transparent -D ' . $this->density . ' -o ' . $filename . ' ' . $this->tmpDir . '/' . $this->hash . '.dvi 2>&1';
+        if (shell_exec($command) === null) {
             throw new \Exception('Unable to convert the DVI file to PNG (is dvipng installed?)');
         }
         $this->file = file_get_contents($filename);
+        if($this->file === false){
+            throw new \Exception('Unable to get PNG file (is tmp dir writable and readable?)');
+        }
         $this->fileName = $filename;
     }
 
