@@ -1,90 +1,78 @@
 <?php
 
-namespace Gregwar\Tex2png;
-
-use Gregwar\Cache\Cache;
+namespace Erk\Tex2png;
 
 /**
  * Helper to generate PNG from LaTeX formula
  *
- * @author Grégoire Passault <g.passault@gmail.com>
+ * @author Grégoire Passault <g.passault@gmail.com> & Michał Kniotek
  */
 class Tex2png
 {
-    
+    /* TODO: do zainstalowania:
+    sudo apt-get install texlive
+    sudo apt-get install texlive-pstricks
+    sudo apt-get install dvipng
+    */
+
     /**
     * Where is the LaTex ?
     */
-    const LATEX = "/usr/bin/latex";
+    const LATEX = "latex";
     
     /**
     * Where is the DVIPNG ?
     */
-    const DVIPNG = "/usr/bin/dvipng";
+    const DVIPNG = "dvipng";
 
     /**
      * LaTeX packges
      */
-    public $packages = array('amssymb,amsmath', 'color', 'amsfonts', 'amssymb', 'pst-plot');
+    protected $packages = array('amssymb, amsmath', 'color', 'amsfonts', 'amssymb', 'pst-plot');
     
-    /**
-     * Cache directory
-     */
-    public $cacheDir = 'cache/tex';
-
-    /**
-     * Actual cache directory
-     */
-    public $actualCacheDir = null;
-
     /**
      * Temporary directory
      * This is needed to write temporary files needed for
      * generation
      */
-    public $tmpDir = '/tmp';
+    protected  $tmpDir = '/tmp';
 
     /**
      * Target file
      */
-    public $file = null;
+    protected  $file = null;
 
     /**
-     * Cache
+     * @var null Target file name
      */
-    public $cache = null;
-
-    /**
-     * Target actual file
-     */
-    public $actualFile = null;
+    protected  $fileName = null;
 
     /**
      * Hash
      */
-    public $hash;
+    protected  $hash;
 
     /**
      * LaTeX formula
      */
-    public $formula;
+    protected  $formula;
 
     /**
      * Target density
      */
-    public $density;
+    protected  $density;
 
     /**
      * Error (if any)
      */
-    public $error = null;
+    protected  $error = null;
 
     public static function create($formula, $density = 155)
     {
         return new self($formula, $density);
     }
 
-    public function __construct($formula, $density = 155)
+    protected function __construct($formula, $density = 155)
     {
         $datas = array(
             'formula' => $formula,
@@ -94,17 +82,6 @@ class Tex2png
         $this->formula = $formula;
         $this->density = $density;
         $this->hash = sha1(serialize($datas));
-        $this->cache = new Cache;
-
-        return $this;
-    }
-
-    /**
-     * Sets the target directory
-     */
-    public function saveTo($file)
-    {
-        $this->actualFile = $this->file = $file;
 
         return $this;
     }
@@ -116,34 +93,16 @@ class Tex2png
     {
         $tex2png = $this;
 
-        $generate = function($target) use ($tex2png) {
-            $tex2png->actualFile = $target;
+        // Generates the LaTeX file
+        $tex2png->createFile();
 
-            try {
-                // Generates the LaTeX file
-                $tex2png->createFile();
-           
-                // Compile the latexFile     
-                $tex2png->latexFile();
+        // Compile the latexFile
+        $tex2png->latexFile();
 
-                // Converts the DVI file to PNG
-                $tex2png->dvi2png();
-            } catch (\Exception $e) {
-                $tex2png->error = $e;
-            }
+        // Converts the DVI file to PNG
+        $tex2png->dvi2png();
 
-            $tex2png->clean();
-        };
-
-        if ($this->actualFile === null) {
-            $target = $this->hash . '.png';
-            $this->cache->getOrCreate($target, array(), $generate);
-
-            $this->file = $this->cache->getCacheFile($target);
-            $this->actualFile = $this->cache->getCacheFile($target, true);
-        } else {
-            $generate($this->actualFile);
-        }
+        $tex2png->clean();
 
         return $this;
     }
@@ -151,7 +110,7 @@ class Tex2png
     /**
      * Create the LaTeX file
      */
-    public function createFile()
+    protected function createFile()
     {
         $tmpfile = $this->tmpDir . '/' . $this->hash . '.tex';
 
@@ -172,7 +131,6 @@ class Tex2png
         
         $tex .= '\end{displaymath}'."\n";
         $tex .= '\end{document}'."\n";
-
         if (file_put_contents($tmpfile, $tex) === false) {
             throw new \Exception('Failed to open target file');
         }
@@ -181,9 +139,9 @@ class Tex2png
     /**
      * Compiles the LaTeX to DVI
      */
-    public function latexFile()
+    protected function latexFile()
     {
-        $command = 'cd ' . $this->tmpDir . '; ' . self::LATEX . ' ' . $this->hash . '.tex < /dev/null |grep ^!|grep -v Emergency > ' . $this->tmpDir . '/' .$this->hash . '.err 2> /dev/null 2>&1';
+        $command = 'cd ' . $this->tmpDir . '; ' . self::LATEX . ' ' . $this->hash . '.tex '. ' 2> /dev/null 2>&1 1>' . $this->tmpDir . '/' .$this->hash . '.err';
 
         shell_exec($command);
 
@@ -195,53 +153,25 @@ class Tex2png
     /**
      * Converts the DVI file to PNG
      */
-    public function dvi2png()
+    protected function dvi2png()
     {
         // XXX background: -bg 'rgb 0.5 0.5 0.5'
-        $command = self::DVIPNG . ' -q -T tight -D ' . $this->density . ' -o ' . $this->actualFile . ' ' . $this->tmpDir . '/' . $this->hash . '.dvi 2>&1';
-
-        if (shell_exec($command) === null) {
+        $filename = $this->tmpDir . '/' . $this->hash . '.png';
+        $command = self::DVIPNG . ' -q* -T tight -D ' . $this->density . ' -o ' . $filename . ' ' . $this->tmpDir . '/' . $this->hash . '.dvi 2>&1';
+        shell_exec($command);
+        if (!file_exists($this->tmpDir . '/' . $this->hash . '.png')) {
             throw new \Exception('Unable to convert the DVI file to PNG (is dvipng installed?)');
         }
+        $this->file = file_get_contents($filename);
+        $this->fileName = $filename;
     }
 
     /**
      * Cleaning
      */
-    public function clean()
+    protected function clean()
     {
         @shell_exec('rm -f ' . $this->tmpDir . '/' . $this->hash . '.* 2>&1');
-    }
-
-    /**
-     * Gets the HTML code for the image
-     */
-    public function html()
-     {
-        if ($this->error)
-        {
-            return '<span style="color:red">LaTeX: syntax error (' . $this->error->getMessage() . ')</span>';
-        }
-        else
-        {
-            return '<img class="formula" title="Formula" src="' . $this->getFile() . '">';
-        }
-    }
-
-    /**
-     * Sets the cache directory
-     */
-    public function setCacheDirectory($directory)
-    {
-        $this->cache->setCacheDirectory($directory);
-    }
-
-    /**
-     * Sets the actual cache directory
-     */
-    public function setActualCacheDirectory($actualDirectory)
-    {
-        $this->cache->setActualCacheDirectory($actualDirectory);
     }
 
     /**
@@ -257,15 +187,15 @@ class Tex2png
      */
     public function getFile()
     {
-        return $this->hookFile($this->file);
+        return $this->file;
     }
 
     /**
-     * Hook that helps extending this class (eg: adding a prefix or suffix)
+     * @return string returns file name
      */
-    public function hookFile($filename)
+    public function getFileName()
     {
-        return $filename;
+        return $this->getFileName();
     }
 
     /**
@@ -273,6 +203,6 @@ class Tex2png
      */
     public function __toString()
     {
-        return $this->getFile();
+        return $this->getFileName();
     }
 }
